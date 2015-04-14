@@ -1,18 +1,55 @@
 ﻿@{
-    ViewBag.Title = "Chat";
+    ViewBag.Title = "SignalR Chat";
 }
+<div class="page-header">
+    <h1><small>SignalR</small> Chat</h1>
+</div>
 
-<h2>Chat</h2>
-<div class="container">
-    <div class="form-group">
-        <div class="form-group">
-            <input type="text" id="message" class="form-control" />
+<div class="container-fluid">
+    <div class="row-fluid">
+        <div class="offset2 span8 pull-right userDiv col-sm-4">
+            <div class="userTitleDiv">Connected Users</div>
+            <div id="connectedUsers">
+            </div>
+        </div>
+        <div>
+            <ul id="discussion" class="list-group col-sm-8"></ul>
         </div>
 
-        <input type="button" id="sendmessage" value="Send" class="btn btn-primary" />
-        <input type="hidden" id="displayname" />
+        <div class="navbar navbar-fixed-bottom" id="chatInputs">
+
+            <div class="row">
+                <div class="col-xs-8">
+                    <div class="input-group input-group-lg">
+                        <input type="text" id="message" placeholder="Type your message..." class="form-control" autocomplete="off"/>
+                        <div class="input-group-btn">
+                            <button id="sendmessage" class="btn btn-primary input-lg" type="button">Send</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-xs-2">
+                    <div class="form-group form-group-lg">
+                        <select id="colorChoice" class="form-control input-lg">
+                            <option value="black">Black</option>
+                            <option value="blue">Blue</option>
+                            <option value="red">Red</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="col-xs-2">
+                    <div class="form-group form-group-lg">
+                        <select class="form-control input-lg" disabled>
+                            <option>All</option>
+                            <option>1</option>
+                        </select>
+                    </div>
+                </div>          
+            </div>
+        </div>
     </div>
-    <ul id="discussion" class="list-group"></ul>
+</div>
+<div id="dialog-confirm" title="Enter your name">
+    <input type="text" id="selectedName" class="form-control" />
 </div>
 @section scripts{
 
@@ -20,29 +57,106 @@
     <script src="~/signalr/hubs"></script>
     <script>
         $(function () {
-            var chat = $.connection.chatHub;
-            chat.client.addNewMessageToPage = function (name, message) {
-                $("#discussion").append("<li class='list-group-item'><strong>" + htmlEncode(name) + "</strong>: " + htmlEncode(message) + "</li>");
-            };
-            chat.client.newConnectedUser = function (username) {
-                $("#discussion").append("<li class='list-group-item list-group-item-info'>" + htmlEncode(username) + " connected.</li>");
-            };
-            chat.client.DisconnectedUser = function (username) {
-                $("#discussion").append("<li class='list-group-item list-group-item-warning'>" + htmlEncode(username) + " disconnected.</li>");
-            };
 
-            $("#displayname").val(prompt("Enter your name:", ""));
-            chat.state.userName = $("#displayname").val();
-            $("#message").focus();
+            $("#message").keyup(function (event) {
+                if (event.keyCode === 13) {
+                    $("#sendmessage").click();
+                }
+            });
+
+            $("#chatInputs").hide();
+            var chat = $.connection.chatHub;
+            chat.client.addNewMessageToPage = function (name, message, color) {
+                if (!color) {
+                    color = "black";
+                }
+                var ts = formatDate(new Date(), "%H:%m:%s");
+                $("#discussion").append("<li class='list-group-item' style='color:" + color + ";' ><" + ts + "><strong>" + htmlEncode(name) + "</strong>: " + htmlEncode(message) + "</li>");
+            };
+            chat.client.newConnectedUser = function (username, users) {
+                var ts = formatDate(new Date(), "%H:%m:%s");
+                $("#discussion").append("<li class='list-group-item list-group-item-info'><" + ts + ">" + htmlEncode(username) + " connected.</li>");
+                displayConnectedUsers(users);
+            };
+            chat.client.DisconnectedUser = function (username, users) {
+                var ts = formatDate(new Date(), "%H:%m:%s");
+                $("#discussion").append("<li class='list-group-item list-group-item-warning'><" + ts + ">" + htmlEncode(username) + " disconnected.</li>");
+                displayConnectedUsers(users);
+            };
+            chat.client.allUsers = function (users) {
+                displayConnectedUsers(users);
+            }
+
             $.connection.hub.start().done(function () {
-                $("#sendmessage").click(function () {
-                    chat.server.send($("#displayname").val(), $("#message").val());
+
+                $("#selectedName").focus();
+                $("#dialog-confirm").dialog({
+                    resizable: false,
+                    height: 160,
+                    modal: true,
+                    buttons: {
+                        "Ok": function () {
+                            var username = $("#selectedName").val();
+                            if (username) {
+                                $(this).dialog("close");
+                                chat.state.userName = username;
+                                chat.server.connected();
+                                chat.server.getAllConnectedUsers();
+                                $("#chatInputs").show();
+                                $("#message").focus();
+                            }
+                        }
+                    }
                 });
+
+                $("#sendmessage").click(function () {
+                    var msg = $("#message").val();
+                    if (msg) {
+                        chat.server.send($("#message").val(), $("#colorChoice").val());
+                        $("#message").val("");
+                        $("#message").focus();
+                    }
+                });
+
             });
         });
+
         function htmlEncode(value) {
             var encodedValue = $("<div />").text(value).html();
             return encodedValue;
+        }
+
+        function displayConnectedUsers(users) {
+            var usersDiv = $("#connectedUsers");
+            usersDiv.empty();
+            var html = "";
+            for (var i = 0; i < users.length; i++) {
+                html += "<p>" + users[i] + "</p>";
+            }
+            usersDiv.html(html);
+        }
+        function formatDate(date, fmt) {
+            function pad(value) {
+                return (value.toString().length < 2) ? "0" + value : value;
+            }
+            return fmt.replace(/%([a-zA-Z])/g, function (_, fmtCode) {
+                switch (fmtCode) {
+                    case "Y":
+                        return date.getUTCFullYear();
+                    case "M":
+                        return pad(date.getUTCMonth() + 1);
+                    case "d":
+                        return pad(date.getUTCDate());
+                    case "H":
+                        return pad(date.getUTCHours());
+                    case "m":
+                        return pad(date.getUTCMinutes());
+                    case "s":
+                        return pad(date.getUTCSeconds());
+                    default:
+                        throw new Error("Unsupported format code: " + fmtCode);
+                }
+            });
         }
     </script>
 }

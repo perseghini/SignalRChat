@@ -3,27 +3,68 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using System.Web;
 
 namespace SignalRChat.Hubs
 {
     public class ChatHub : Hub
     {
-        public void Send(string name, string message)
+        private static readonly Dictionary<string, string> Users;
+        private static readonly List<MessageLog> MessageLogs;
+
+        static ChatHub()
         {
-            Clients.All.addNewMessageToPage(Clients.Caller.userName, message);
+            Users = new Dictionary<string, string>();
+            MessageLogs = new List<MessageLog>();
+        }
+
+        public void Send(string message, string color)
+        {
+            var msg = new MessageLog
+            {
+                UserConnectionId = Context.ConnectionId,
+                Username = Clients.Caller.userName,
+                TimeStamp = DateTime.Now,
+                Message = message
+            };
+            MessageLogs.Add(msg);
+            // Save MessageLogs (to a database, a file, etc..)
+
+            Clients.All.addNewMessageToPage(Clients.Caller.userName, message, color);
         }
 
         public void Connected()
         {
-            //Send all client new user connected
-            Clients.All.newConnectedUser(Clients.Caller.userName);
+            Users.Add(Context.ConnectionId, Clients.Caller.userName);
+            Clients.All.newConnectedUser(Clients.Caller.userName, Users.Select(p => p.Value));
+        }
+
+        public void GetAllConnectedUsers()
+        {
+            Clients.Caller.allUsers(Users.Select(p => p.Value));
         }
 
         public override Task OnDisconnected(bool stopCalled)
         {
-            Clients.All.disconnectedUser(Clients.Caller.userName);
+            string userName = "Unknown";
+            if (Users.ContainsKey(Context.ConnectionId))
+            {
+                userName = Users[Context.ConnectionId];
+                Users.Remove(Context.ConnectionId);
+            }
+
+            Clients.All.disconnectedUser(userName, Users.Select(p => p.Value));
             return base.OnDisconnected(stopCalled);
         }
+    }
+
+    public class MessageLog
+    {
+        public string UserConnectionId { get; set; }
+
+        public string Username { get; set; }
+
+        public DateTime TimeStamp { get; set; }
+
+        public string Message { get; set; }
     }
 }

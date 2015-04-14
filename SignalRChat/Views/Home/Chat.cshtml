@@ -1,0 +1,48 @@
+﻿@{
+    ViewBag.Title = "Chat";
+}
+
+<h2>Chat</h2>
+<div class="container">
+    <div class="form-group">
+        <div class="form-group">
+            <input type="text" id="message" class="form-control" />
+        </div>
+
+        <input type="button" id="sendmessage" value="Send" class="btn btn-primary" />
+        <input type="hidden" id="displayname" />
+    </div>
+    <ul id="discussion" class="list-group"></ul>
+</div>
+@section scripts{
+
+    <script src="~/Scripts/jquery.signalR-2.2.0.min.js"></script>
+    <script src="~/signalr/hubs"></script>
+    <script>
+        $(function () {
+            var chat = $.connection.chatHub;
+            chat.client.addNewMessageToPage = function (name, message) {
+                $("#discussion").append("<li class='list-group-item'><strong>" + htmlEncode(name) + "</strong>: " + htmlEncode(message) + "</li>");
+            };
+            chat.client.newConnectedUser = function (username) {
+                $("#discussion").append("<li class='list-group-item list-group-item-info'>" + htmlEncode(username) + " connected.</li>");
+            };
+            chat.client.DisconnectedUser = function (username) {
+                $("#discussion").append("<li class='list-group-item list-group-item-warning'>" + htmlEncode(username) + " disconnected.</li>");
+            };
+
+            $("#displayname").val(prompt("Enter your name:", ""));
+            chat.state.userName = $("#displayname").val();
+            $("#message").focus();
+            $.connection.hub.start().done(function () {
+                $("#sendmessage").click(function () {
+                    chat.server.send($("#displayname").val(), $("#message").val());
+                });
+            });
+        });
+        function htmlEncode(value) {
+            var encodedValue = $("<div />").text(value).html();
+            return encodedValue;
+        }
+    </script>
+}
